@@ -2,6 +2,8 @@
 #include "biharmonic_solve.h"
 #include "arap_precompute.h"
 #include "arap_single_iteration.h"
+#include "harmonic_precompute.h"
+#include "harmonic_solve.h"
 #include <igl/min_quad_with_fixed.h>
 #include <igl/read_triangle_mesh.h>
 #include <igl/opengl/glfw/Viewer.h>
@@ -54,7 +56,7 @@ int main(int argc, char *argv[])
   Eigen::MatrixXi F;
   long sel = -1;
   Eigen::RowVector3f last_mouse;
-  igl::min_quad_with_fixed_data<double> biharmonic_data, arap_data;
+  igl::min_quad_with_fixed_data<double> biharmonic_data, arap_data, harmonic_data;
   Eigen::SparseMatrix<double> arap_K;
 
   // Load input meshes
@@ -76,7 +78,8 @@ R,r      Reset control points
   {
     BIHARMONIC = 0,
     ARAP = 1,
-    NUM_METHODS = 2,
+    HARMONIC = 2,
+    NUM_METHODS = 3,
   } method = BIHARMONIC;
 
   const auto & update = [&]()
@@ -109,10 +112,17 @@ R,r      Reset control points
           arap_single_iteration(arap_data,arap_K,s.CU,U);
           break;
         }
+        case HARMONIC:
+        {
+          Eigen::MatrixXd D;
+          harmonic_solve(harmonic_data,s.CU-s.CV,D);
+          U = V+D;
+          break;
+        }
       }
       viewer.data().set_vertices(U);
-      viewer.data().set_colors(method==BIHARMONIC?orange:yellow);
-      viewer.data().set_points(s.CU,method==BIHARMONIC?blue:green);
+      viewer.data().set_colors(method==BIHARMONIC?orange:(method==ARAP?yellow:green));
+      viewer.data().set_points(s.CU,method==BIHARMONIC?blue:(method==ARAP?green:orange));
     }
     viewer.data().compute_normals();
   };
@@ -237,6 +247,7 @@ R,r      Reset control points
           // PRECOMPUTATION FOR DEFORMATION
           biharmonic_precompute(V,F,b,biharmonic_data);
           arap_precompute(V,F,b,arap_data,arap_K);
+          harmonic_precompute(V,F,b,harmonic_data);
         }
         break;
       default:
@@ -272,6 +283,9 @@ R,r      Reset control points
   viewer.data().show_lines = false;
   viewer.core().is_animating = true;
   viewer.data().face_based = true;
+  
+  viewer.core().background_color << 0.9, 0.9, 0.9, 1.0;
+  
   update();
   viewer.launch();
   return EXIT_SUCCESS;
